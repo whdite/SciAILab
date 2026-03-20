@@ -1,0 +1,23 @@
+# Runtime state
+data/research.db
+workspace/projects/
+.repo-backups/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+openclaw/node_modules/
+openclaw/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

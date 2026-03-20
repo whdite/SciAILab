@@ -1,0 +1,83 @@
+{
+  "id": "research-core",
+  "name": "Research Core",
+  "description": "SciAILab project registry and Python runtime bridge.",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "pythonBinary": {
+        "type": "string",
+        "description": "Python executable used for the SciAILab runtime worker."
+      },
+      "transport": {
+        "type": "string",
+        "enum": ["fastapi", "stdio"],
+        "description": "Bridge transport. fastapi is recommended."
+      },
+      "serviceBaseUrl": {
+        "type": "string",
+        "description": "Base URL for the SciAILab FastAPI service."
+      },
+      "dbPath": {
+        "type": "string",
+        "description": "Optional path to research.db. Relative paths resolve from the SciAILab repo root."
+      },
+      "workspaceRoot": {
+        "type": "string",
+        "description": "Optional path to the workspace/projects root. Relative paths resolve from the SciAILab repo root."
+      },
+      "coordinatorExecution": {
+        "type": "string",
+        "enum": ["agent", "python"],
+        "default": "agent",
+        "description": "Coordinator execution backend. agent uses OpenClaw subagents and bundled skills; python keeps the deterministic FastAPI fallback."
+      },
+      "coordinatorAutoRun": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether research-core should poll the task queue and run coordinators automatically."
+      },
+      "coordinatorPollMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "default": 3000,
+        "description": "Polling interval in milliseconds for the coordinator service."
+      },
+      "coordinatorBatchSize": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 1,
+        "description": "Maximum claimed tasks per polling pass."
+      },
+      "coordinatorRunTimeoutMs": {
+        "type": "integer",
+        "minimum": 30000,
+        "default": 180000,
+        "description": "Subagent run timeout in milliseconds for one coordinator task."
+      },
+      "coordinatorSessionPrefix": {
+        "type": "string",
+        "description": "Session key prefix for plugin-owned coordinator subagent runs."
+      },
+      "coordinatorDeleteSession": {
+        "type": "boolean",
+        "default": true,
+        "description": "Delete coordinator subagent sessions after completion."
+      },
+      "coordinatorProvider": {
+        "type": "string",
+        "description": "Optional provider override for plugin-owned coordinator subagent runs."
+      },
+      "coordinatorModel": {
+        "type": "string",
+        "description": "Optional model override for plugin-owned coordinator subagent runs."
+      }
+    }
+  }
+}
