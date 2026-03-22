@@ -137,13 +137,13 @@ function createApiMock() {
     },
     runtime: {
       subagent: {
-        async run({ sessionKey, provider, model }) {
+        async run({ sessionKey, provider, model, authProfile }) {
           const role = findRole(sessionKey);
           const active = (activeByRole.get(role) ?? 0) + 1;
           activeByRole.set(role, active);
           maxActiveByRole.set(role, Math.max(active, maxActiveByRole.get(role) ?? 0));
           const usage = routeUsage.get(role) ?? new Set();
-          usage.add(`${provider ?? ""}|${model ?? ""}`);
+          usage.add(`${provider ?? ""}|${model ?? ""}|${authProfile ?? ""}`);
           routeUsage.set(role, usage);
           runCounter += 1;
           const runId = `run_${String(runCounter)}`;
@@ -239,10 +239,10 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         routes: [
-          { role: "explorer", provider: "provider-explorer", model: "model-explorer", max_concurrency: 2, active: true },
-          { role: "experiment", provider: "provider-experiment", model: "model-experiment", max_concurrency: 1, active: true },
-          { role: "writer", provider: "provider-writer", model: "model-writer", max_concurrency: 1, active: true },
-          { role: "reviewer", provider: "provider-reviewer", model: "model-reviewer", max_concurrency: 1, active: true },
+          { role: "explorer", provider: "provider-explorer", model: "model-explorer", auth_profile: "profile-explorer", max_concurrency: 2, active: true },
+          { role: "experiment", provider: "provider-experiment", model: "model-experiment", auth_profile: "profile-experiment", max_concurrency: 1, active: true },
+          { role: "writer", provider: "provider-writer", model: "model-writer", auth_profile: "profile-writer", max_concurrency: 1, active: true },
+          { role: "reviewer", provider: "provider-reviewer", model: "model-reviewer", auth_profile: "profile-reviewer", max_concurrency: 1, active: true },
         ],
       }),
     });
@@ -309,10 +309,22 @@ async function main() {
       reviewer: "done",
     });
     assert.ok((api.metrics.maxActiveByRole.get("explorer") ?? 0) >= 2);
-    assert.ok(api.metrics.routeUsage.get("explorer")?.has("provider-explorer|model-explorer"));
-    assert.ok(api.metrics.routeUsage.get("experiment")?.has("provider-experiment|model-experiment"));
-    assert.ok(api.metrics.routeUsage.get("writer")?.has("provider-writer|model-writer"));
-    assert.ok(api.metrics.routeUsage.get("reviewer")?.has("provider-reviewer|model-reviewer"));
+    assert.ok(
+      api.metrics.routeUsage.get("explorer")?.has("provider-explorer|model-explorer|profile-explorer"),
+    );
+    assert.ok(
+      api.metrics.routeUsage.get("experiment")?.has(
+        "provider-experiment|model-experiment|profile-experiment",
+      ),
+    );
+    assert.ok(
+      api.metrics.routeUsage.get("writer")?.has("provider-writer|model-writer|profile-writer"),
+    );
+    assert.ok(
+      api.metrics.routeUsage.get("reviewer")?.has(
+        "provider-reviewer|model-reviewer|profile-reviewer",
+      ),
+    );
 
     console.log(
       JSON.stringify(

@@ -1,272 +1,357 @@
 # SciAILab Progress Plan
 
-本文记录 SciAILab 当前已经落地的部分、剩余差距，以及接下来的推进顺序。
-这里不再保留早期的理想化阶段拆分，而是以当前代码和验证结果为准。
+## 2026-03-22 Update
+
+- 已完成一轮真实的 `zai / glm-5` coordinator 全链路验证，短项目 `g1` 收敛结果为：
+  - `12` 个任务全部 `done`
+  - `0` 个 `blocked_tasks`
+  - `0` 个 `active_tasks`
+  - `review_approved` 已出现
+  - `worktrees / execution_contexts / completion_hooks` 均完成自动收口
+- OpenClaw `research-core` 已补 `subagent.allowModelOverride = true`
+- FastAPI 运行已切到短 worktree 根目录 `C:\\wt`，规避 Windows 长路径问题
+- `Agents` 页已从“只有 operator thread”推进到“operator thread + derived business replay”
+- Agent Workspace 当前已支持三类聊天化回显：
+  - `Agent 输出`
+  - `交接消息`
+  - `系统状态`
+- 当前最值得继续推进的不是再扩架构，而是：
+  - 继续清洗 `Agents` 页中文文案
+  - 细化 `approval / review_request / review_note` 中文模板
+  - 评估 `Agents` 页增量推送而不是纯轮询
+
+本文只记录当前代码已经落地的事实、已验证结果，以及下一阶段仍应推进的事项。
+
+默认阅读顺序：
+
+1. `setup.md`
+2. `docs/README.md`
+3. 本文
+4. `docs/SCIAILAB_RULE_MATRIX.md`
+5. `docs/SCIAILAB_P3D_EXECUTION_BACKLOG.md`
 
 ## 1. 当前结论
 
-截至当前版本，SciAILab 已经完成了第一条可运行主链路：
+截至 `2026-03-21`，SciAILab 已经不再处于纯设计阶段，而是进入“主链可运行、持续补强”的阶段。
 
-- Python 侧以 FastAPI 驱动 research event/task/runtime
-- SQLite 作为当前 truth store 已经跑通
-- OpenClaw `research-core` 已接入项目、任务、事件、消息、包、状态管理
-- OpenClaw `research-core` 已接入研究控制面，支持 agent routing / activation / scheduler state
-- 四类 coordinator 已切到 agent-backed 执行路径
-- coordinator 调度已从单 pass 串行演进到按 role worker pool
-- coordinator 完成后统一通过 `research_task.update_status(..., eventType=...)` 推进下游
-- 当前 workspace 已具备本地 bootstrap 和 verify 能力
+当前已经稳定成立的主链是：
 
-这意味着项目已经从“架构规划期”进入“主链路持续强化期”。
+`OpenClaw research-core -> FastAPI runtime -> SQLite truth store -> workspace/projects + worktrees -> WebUI operator surfaces`
 
-## 2. 已落地能力
+这条主链已经具备以下特征：
 
-### 2.1 数据与运行时
+- OpenClaw 负责插件注册、subagent 执行、gateway method、auth/runtime 对接
+- FastAPI 负责项目、任务、事件、消息、状态、控制动作和 read-model
+- SQLite 继续作为当前单机场景下的 truth store
+- coordinator 已切到以 agent-backed 为主的执行路径
+- worktree / execution context / completion hook 已进入运行时主链
+- WebUI 已具备 dashboard、Trace、Control、Settings 四类操作入口
+
+## 2. 当前架构基线
+
+### 2.1 运行时分层
+
+- `openclaw/extensions/research-core`
+  - 插件入口
+  - gateway methods
+  - agent tools
+  - coordinator service
+- `python/research_runtime`
+  - FastAPI API
+  - SQLite 访问层
+  - state machine
+  - event consumer
+  - task driver
+  - worktree / execution context / completion hook 读写
+- `workspace/projects/<project-id>/`
+  - canonical project workspace
+- `workspace/worktrees/<project-id>/<role>/<task-id>/`
+  - execution workspace
+- `web/`
+  - 独立前端应用
+  - dashboard / Trace / Control / Settings
+
+### 2.2 当前边界
+
+- 不改长时记忆系统
+- 不替换 SQLite
+- 不把 tmux 升格为运行时契约
+- 不把 leader prompt 变成主编排器
+- 不把 SciAILab 改造成通用 swarm shell
+
+## 3. 已落地能力
+
+### 3.1 数据与运行时
 
 已落地：
 
-- SQLite truth store
 - FastAPI runtime
-- 项目、artifact、message、event、package、task、agent state 表与读写接口
-- 事件消费器
-- task 驱动器
-- artifact state / agent state 更新逻辑
+- SQLite truth store
+- 项目、任务、事件、消息、artifact、package、agent state 基础表与 API
+- task state machine
+- event consumer
+- task driver
+- project read-model
 
 当前判断：
 
-- SQLite 作为当前单机场景的 truth store 是够用的
-- 现阶段不需要为了“跨项目全局记忆”立刻引入 PostgreSQL
-- 如果未来要做跨项目共享记忆、复杂查询、并发 worker 扩展，再考虑把 PostgreSQL 作为 memory/index/control-plane 扩展层，而不是替换当前 SQLite 主链
+- 单机开发与联调阶段，SQLite 足够
+- PostgreSQL 仍属于后续扩展项，不是当前主线阻塞
 
-### 2.2 OpenClaw 集成
+### 3.2 OpenClaw 集成
 
 已落地：
 
-- `openclaw/extensions/research-core/`
+- `research-core` 插件注册
 - gateway methods
 - agent tools
 - coordinator service
-- coordinator config schema
-- role skills
+- 基于角色的 subagent 执行
+- provider / model / auth profile / max concurrency 路由
 
-当前可用接口覆盖：
+当前主角色：
 
-- `research.project.create`
-- `research.project.status`
-- `research.control.agent_routing.get`
-- `research.control.agent_routing.update`
-- `research.control.agent_activation.set`
-- `research.control.scheduler_state.get`
-- `research.artifact.list`
-- `research.message.send`
-- `research.message.list`
-- `research.event.emit`
-- `research.event.list`
-- `research.event.consume`
-- `research.package.freeze`
-- `research.package.list`
-- `research.task.create`
-- `research.task.list`
-- `research.task.update_status`
-- `research.state.agent_list`
-- `research.coordinator.run`
+- `explorer`
+- `experiment`
+- `writer`
+- `reviewer`
 
-工具侧已落地：
-
-- `research_project`
-- `research_control`
-- `research_artifact`
-- `research_message`
-- `research_event`
-- `research_freeze`
-- `research_task`
-- `research_state`
-- `research_coordinator`
-
-### 2.3 Coordinator 主链
+### 3.3 Coordinator 主链
 
 已落地：
 
-- explorer
-- experiment
-- writer
-- reviewer
-
-当前执行模式：
-
-- 默认模式为 `agent`
-- OpenClaw service 按 role worker pool 轮询并 claim task
-- 按角色启动 subagent
-- 按 role 读取控制面路由配置并应用 `active/provider/model/max_concurrency`
-- subagent 返回结构化 JSON
-- 自动写 artifact
-- 自动注册 package/message/task completion/event/state
+- coordinator 默认走 `agent` 执行模式
+- 通过 `research_task.update_status(..., eventType=...)` 统一推进下游
+- role worker-pool 可按角色 claim task
+- 结构化输出会回写 artifact / package / message / event / state
 
 当前默认事件推进：
 
-- explorer -> `hypothesis_ready_for_experiment`
-- experiment -> `experiment_results_ready`
-- writer -> `review_requested`
-- reviewer -> `review_requires_ablation`
-- reviewer -> `review_requires_evidence`
-- reviewer -> `review_requires_revision`
-- reviewer -> `review_approved`
+- `explorer -> hypothesis_ready_for_experiment`
+- `experiment -> experiment_results_ready`
+- `writer -> review_requested`
+- `reviewer -> review_requires_ablation`
+- `reviewer -> review_requires_evidence`
+- `reviewer -> review_requires_revision`
+- `reviewer -> review_approved`
 
-### 2.4 Frozen Package
+### 3.4 执行隔离与结果收口
 
 已落地：
 
-- `research.package.freeze`
-- writer 输入冻结包 `writing_input_package`
-- explorer / experiment 输出冻结包
+- `project_worktrees`
+- `task_execution_contexts`
+- `task_completion_hooks`
+- `/v1/worktrees`
+- `/v1/execution-contexts`
+- `/v1/completion-hooks`
+- `/v1/control/actions/attach`
+- `/v1/control/actions/checkpoint`
+- `/v1/control/actions/merge`
+- `/v1/control/actions/cleanup`
 
-当前约束：
+当前行为：
 
-- writer 不再直接追“最新目录状态”
-- writer 读取冻结输入包，保证当前写作轮次可审计、可复现
+- coordinator 优先把实际输出写入 `execution_workspace_path`
+- 任务进入 `done` 后会触发自动收口链
+- 当前自动链路为：
+  - `done -> checkpoint -> merge -> cleanup`
 
-## 3. 当前验证状态
+说明：
 
-以下验证已经通过：
+- 当前 `merge` 仍是保守的 promote/copy 语义
+- 这不是完整 git merge
+- 但已经满足当前 artifact/package 归档与收口需求
 
+### 3.5 消息交接与 operator 视图
+
+已落地：
+
+- `messages` 已从被动记录升级为可操作 handoff queue
+- message action：
+  - `mark-read`
+  - `ack`
+  - `handoff-state`
+- timeline audit event 已接入消息动作
+- read-model 已提供：
+  - `pending_inbox`
+  - `teammate_messages`
+  - `recent_messages`
+  - `handoff_metrics`
+  - `handoff_sla`
+
+当前可见能力：
+
+- blocked handoff 统计
+- timed-out pending 统计
+- unacked 统计
+- 按 agent 的 SLA 面板
+- queue 分组与过滤
+
+### 3.6 WebUI
+
+当前页面：
+
+- 首页 dashboard
+- `Trace`
+- `Control`
+- `Projects`
+- `Settings`
+
+已完成的关键能力：
+
+- 首页已从展示页转成 operator dashboard
+- dashboard 已接入：
+  - lab 运行状态
+  - handoff queue
+  - operator backlog
+  - agent SLA
+  - worktree
+  - execution context
+  - 调度日志
+- `Trace` 已支持：
+  - attach-first 视图
+  - worktree / execution context / hook 详情
+  - inbox / teammate messaging
+  - queue 分组 / 过滤 / quick action
+- `Control` 已支持：
+  - role routing
+  - activation
+  - auth profile inventory / quick API-key entry
+  - provider observability
+  - worktree / execution context / hooks 面板
+  - runtime policy 只读面板
+- `Settings` 已支持：
+  - API / Gateway 地址
+  - 自动刷新
+  - 语言
+  - handoff SLA 阈值配置
+
+### 3.7 文档收口
+
+本轮已完成文档收口：
+
+- `docs/README.md` 作为统一阅读入口
+- `setup.md` 作为统一启动说明
+- 删除已被当前实现替代的重复设计文档
+
+## 4. 已验证
+
+已明确通过的验证包括：
+
+- `python -m compileall python/research_runtime`
+- `npm --prefix web run build`
 - `python scripts/verify_fastapi_runtime.py`
 - `python scripts/verify_coordinator_pipeline.py`
 - `tsx scripts/verify_openclaw_agent_coordinator.mjs`
 - `tsx scripts/verify_openclaw_coordinator_service_pool.mjs`
-- `tsx --tsconfig tsconfig.runtime-imports.json ..\scripts\verify_openclaw_plugin_import.mjs`
+- `tsx --tsconfig tsconfig.runtime-imports.json ..\\scripts\\verify_openclaw_plugin_import.mjs`
 
-此外，已收敛出一键脚本：
+运行时配置 smoke 也已验证：
 
-- `powershell -ExecutionPolicy Bypass -File scripts\bootstrap_verify_research_core.ps1`
+- 默认 `handoff_pending_timeout_seconds = 1800` 时，旧 pending 会进入 `aged_pending_count`
+- 调高到合法大阈值后，`aged_pending_count` 会按预期下降到 `0`
 
-支持两种模式：
+## 5. 当前最值得继续推进的工作
 
-- `bootstrap+verify`
-- `verify-only`
+### 5.1 P3-D 收尾
 
-该脚本已经验证通过，当前 workspace 可本地运行并验证 `research-core`。
+优先继续补强这些闭环：
 
-## 4. 当前阶段判断
+1. dashboard 上继续补 `attach / checkpoint / merge / cleanup` 操作入口
+2. completion policy 继续从“只处理 done”扩展到 `blocked / failed`
+3. CLI / Web / OpenClaw helper 继续统一 control action 契约
 
-当前建议把项目状态定义为：
+### 5.2 runtime policy
 
-### 已完成
+下一步不再只做 handoff SLA，而要继续扩展：
 
-- P0 架构冻结
-- P1 SQLite + FastAPI truth/runtime 主链
-- P2 research-core 启用与最小调用路径
-- P3 event bus / frozen package / task 状态推进
-- P4 四类 coordinator 接入 event-driven downstream
-- P5 agent-backed coordinator 实装
-- P6 workspace bootstrap/verify 收敛
-- P7 控制面路由接口与按 role worker pool 调度
+- queue escalation policy
+- completion hook policy
+- blocked / failed task post-processing policy
 
-### 进行中
+### 5.3 UI 与文案清洗
 
-- coordinator 从“最小可运行”向“更强执行策略”演进
-- review loop 的策略细化
-- OpenClaw workspace 开发体验稳定化
-- control-plane 配置向真正的多 provider / 多凭证执行能力继续演进
+仍需继续清理：
 
-### 未完成
+- operator-facing UI 文案残留的编码噪声
+- 部分控件与状态文本的中英混杂
+- 历史页面残留的措辞不一致
 
-- 真正的长期 memory 层
-- 多 worker / 多进程并发策略
-- 全量 observability 面板
-- 大规模 reconcile / retry / dead-letter 策略
-- 更完整的 reviewer 决策分叉
-- 端到端 demo 工程模板
-- `auth_profile` / OAuth 在 subagent runtime 的可执行透传
+### 5.4 provider / auth 侧能力
 
-## 5. 下一阶段优先级
+仍值得继续增强：
 
-建议接下来按下面顺序推进。
+- quota 观测
+- failover policy
+- role 级 provider policy
+- auth inventory 与运行时状态的更清晰映射
 
-### Priority A
+## 6. 当前执行顺序建议
 
-- 强化 `research_task` 生命周期定义
-- 补齐 task claim / retry / blocked / requeue 规则
-- 明确每类 event 对应的下游 task 生成策略
+建议继续按这个顺序推进：
 
-### Priority B
+1. 完成 operator 面剩余闭环
+2. 完成 runtime policy 第二阶段
+3. 继续清洗 UI 文案与文档
+4. 再评估更远期的 memory / remote worker / 更强 scheduler
 
-- 强化 reviewer 回路
-- 细化 `review_requires_ablation` 的下游拆解
-- 区分“补实验”“补证据”“补写作”三类返工
+原因是：
 
-### Priority C
+- 当前主链已经成立
+- 继续开新架构分支收益不高
+- 现阶段最大价值来自“把 operator 闭环做完整”
 
-- 做可观测性
-- 增加 coordinator run log / event trace / task trace
-- 给 project 级状态页补更清晰的 summary
+## 7. 当前主要风险
 
-### Priority D
-
-- 设计跨项目 memory
-- 先明确 memory schema 和 retrieval contract
-- 再判断是否需要 PostgreSQL / pgvector，而不是先换库
-
-## 6. 当前主要风险
-
-### 风险一：OpenClaw workspace 依赖漂移
+### 风险一：UI 与文案债务
 
 现状：
 
-- `research-core` 当前已经可以在本地 workspace 下 bootstrap 和 verify
-- 但 OpenClaw 整仓仍存在依赖和构建产物漂移
-- 因此需要本地 shim 和 compat 脚本
+- 页面功能已经显著超出早期基线
+- 但文案、语言层、历史遗留编码问题仍可能影响可读性
 
 应对：
 
-- 保留 bootstrap/verify 脚本
-- 把 runtime shim 当作当前 workspace 兼容层，而不是产品逻辑
+- 继续按页面做文案与编码清洗
+- 保持“UI 文案”和“业务原始值”严格分层
 
-### 风险二：event 规则继续散落
+### 风险二：runtime policy 仍偏薄
 
 现状：
 
-- 当前链路已跑通
-- 但 event -> downstream task 的规则仍需要继续系统化
+- handoff SLA 已落地
+- 但 blocked / failed / escalation / completion hook policy 仍不完整
 
 应对：
 
-- 把事件类型、触发条件、下游 task 模板写成明确规则表
+- 继续把 policy 前置到 runtime 读写模型和设置面板
 
-### 风险三：review loop 过于粗糙
+### 风险三：结果收口仍偏保守
 
 现状：
 
-- reviewer 已经具备 `review_requires_ablation` / `review_requires_evidence` / `review_requires_revision` / `review_approved` 四类结果
-- 但当前仍主要是最小模板化分支，尚未形成更细的审稿判定准则与回环约束
+- 当前 `merge` 主要是安全 promote/copy
+- 对复杂代码分支场景，能力还不够强
 
 应对：
 
-- 下一阶段优先补 reviewer 分叉策略，而不是过早扩更多 coordinator 类型
+- 先保持保守语义
+- 等 operator 面和 policy 面稳定后，再评估更强 merge 策略
 
-### 风险四：控制面配置与执行面能力暂未完全对齐
+## 8. 当前完成定义
 
-现状：
-
-- FastAPI/SQLite 已经能保存 role 级 `provider/model/auth_profile/max_concurrency`
-- OpenClaw 当前已执行 `provider/model/max_concurrency/active`
-- `auth_profile` 还不能真正送入 subagent runtime
-
-应对：
-
-- 下一步需要在宿主 runtime 补可执行的 auth profile 参数，而不是继续只扩存储层
-
-## 7. 当前完成定义
-
-如果只讨论“当前 research-core enablement 是否完成”，可以定义为：
+如果只讨论“当前 SciAILab 主链是否已经可用”，完成定义可以写成：
 
 - 能启动 FastAPI runtime
-- 能创建项目和状态数据
-- 能消费 event 并生成 downstream task
-- 能运行四类 coordinator
-- 能经由 agent-backed path 写 artifact / package / message / event / state
-- 能在当前 workspace 下一键 bootstrap 和 verify
+- 能启动 OpenClaw gateway 与 `research-core`
+- 能通过 WebUI 和 API 看到 project / task / event / message / state
+- 能由 coordinator 通过 agent-backed 路径完成下游推进
+- 能在任务完成后触发 checkpoint / merge / cleanup 自动链
+- 能在 dashboard / Trace / Control 中看到 operator 所需核心状态
 
-这个目标当前已经达成。
+按这个定义，当前版本已经满足“可用主链已成立”。
 
-## 8. 一句话收束
+## 9. 一句话收束
 
-SciAILab 当前不是停留在规划文档阶段，而是已经拥有一条由 FastAPI、SQLite、OpenClaw `research-core`、四类 coordinator 和 event-driven downstream 组成的可运行主链；接下来重点应放在规则强化、review 回路和可观测性，而不是重新讨论底层骨架。
+SciAILab 当前最重要的事情，不是重新讨论架构，而是继续把已经跑通的 execution isolation、handoff queue、operator board、runtime policy 和结果收口闭环做完整。

@@ -100,6 +100,20 @@ def main() -> int:
     event_types = [event["event_type"] for event in events["events"]]
     package_types = sorted({package["package_type"] for package in packages["packages"]})
     agent_state_map = {item["agent_id"]: item["state"] for item in agent_states["agent_states"]}
+    draft_artifacts = [artifact for artifact in artifacts["artifacts"] if artifact["artifact_type"] == "draft"]
+    experiment_artifacts = [artifact for artifact in artifacts["artifacts"] if artifact["artifact_type"] == "results_summary"]
+
+    def parse_dependencies(artifact: dict) -> list[str]:
+        return json.loads(artifact["upstream_dependencies"] or "[]")
+
+    revised_draft_present = any(
+        any("review_report" in dependency for dependency in parse_dependencies(artifact))
+        for artifact in draft_artifacts
+    )
+    feedback_driven_experiment_present = any(
+        any("review_report" in dependency for dependency in parse_dependencies(artifact))
+        for artifact in experiment_artifacts
+    )
 
     assert_equal(coordinator["count"], 12, "coordinator run count")
     assert_equal(task_counter, Counter({"writer": 4, "reviewer": 4, "experiment": 3, "explorer": 1}), "task owner counts")
@@ -107,6 +121,8 @@ def main() -> int:
     assert_equal(artifact_types, ["draft", "hypotheses", "results_summary", "review_report"], "artifact types")
     assert_equal(package_types, ["experiment_bundle", "research_package", "writing_input_package"], "package types")
     assert_equal(agent_state_map, {"explorer": "idle", "experiment": "idle", "writer": "done", "reviewer": "idle"}, "agent states")
+    assert_equal(revised_draft_present, True, "review-driven draft dependency")
+    assert_equal(feedback_driven_experiment_present, True, "review-driven experiment dependency")
     for required_event in (
         "hypothesis_ready_for_experiment",
         "experiment_results_ready",

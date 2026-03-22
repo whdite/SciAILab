@@ -331,6 +331,7 @@ function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
           deliver: params.deliver ?? false,
           ...(allowOverride && params.provider && { provider: params.provider }),
           ...(allowOverride && params.model && { model: params.model }),
+          ...(params.authProfile && { authProfile: params.authProfile }),
           ...(params.extraSystemPrompt && { extraSystemPrompt: params.extraSystemPrompt }),
           ...(params.lane && { lane: params.lane }),
           ...(params.idempotencyKey && { idempotencyKey: params.idempotencyKey }),

@@ -156,6 +156,45 @@ function normalizeExplicitOverrideInput(raw: string, kind: "provider" | "model")
   return trimmed;
 }
 
+function normalizeExplicitAuthProfileInput(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error(`Auth profile override must be non-empty.`);
+  }
+  if (trimmed.length > OVERRIDE_VALUE_MAX_LENGTH) {
+    throw new Error(
+      `Auth profile override exceeds ${String(OVERRIDE_VALUE_MAX_LENGTH)} characters.`,
+    );
+  }
+  if (containsControlCharacters(trimmed)) {
+    throw new Error(`Auth profile override contains invalid control characters.`);
+  }
+  return trimmed;
+}
+
+function resolveExplicitRunAuthProfile(params: {
+  authProfileId?: string;
+  provider: string;
+  agentDir: string;
+}): string | undefined {
+  if (typeof params.authProfileId !== "string") {
+    return undefined;
+  }
+  const authProfileId = normalizeExplicitAuthProfileInput(params.authProfileId);
+  const store = ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });
+  const profile = store.profiles[authProfileId];
+  if (!profile) {
+    throw new Error(`Auth profile "${sanitizeForLog(authProfileId)}" is not configured.`);
+  }
+  if (normalizeProviderId(profile.provider) !== normalizeProviderId(params.provider)) {
+    throw new Error(
+      `Auth profile "${sanitizeForLog(authProfileId)}" is configured for ` +
+        `"${sanitizeForLog(profile.provider)}", not "${sanitizeForLog(params.provider)}".`,
+    );
+  }
+  return authProfileId;
+}
+
 async function persistSessionEntry(params: PersistSessionEntryParams): Promise<void> {
   const persisted = await updateSessionStore(params.storePath, (store) => {
     const merged = mergeSessionEntry(store[params.sessionKey], params.entry);
@@ -372,6 +411,7 @@ function runAgentAttempt(params: {
   resolvedVerboseLevel: VerboseLevel | undefined;
   agentDir: string;
   onAgentEvent: (evt: { stream: string; data?: Record<string, unknown> }) => void;
+  explicitAuthProfileId?: string;
   authProfileProvider: string;
   sessionStore?: Record<string, SessionEntry>;
   storePath?: string;
@@ -483,10 +523,15 @@ function runAgentAttempt(params: {
     });
   }
 
-  const authProfileId =
+  const explicitAuthProfileId =
     params.providerOverride === params.authProfileProvider
-      ? params.sessionEntry?.authProfileOverride
+      ? params.explicitAuthProfileId
       : undefined;
+  const authProfileId =
+    explicitAuthProfileId ??
+    (params.providerOverride === params.authProfileProvider
+      ? params.sessionEntry?.authProfileOverride
+      : undefined);
   return runEmbeddedPiAgent({
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
@@ -515,7 +560,11 @@ function runAgentAttempt(params: {
     provider: params.providerOverride,
     model: params.modelOverride,
     authProfileId,
-    authProfileIdSource: authProfileId ? params.sessionEntry?.authProfileOverrideSource : undefined,
+    authProfileIdSource: explicitAuthProfileId
+      ? "user"
+      : authProfileId
+        ? params.sessionEntry?.authProfileOverrideSource
+        : undefined,
     thinkLevel: params.resolvedThinkLevel,
     verboseLevel: params.resolvedVerboseLevel,
     timeoutMs: params.timeoutMs,
@@ -1044,7 +1093,6 @@ async function agentCommandInternal(
         model = normalizedStored.model;
       }
     }
-    const providerForAuthProfileValidation = provider;
     if (hasExplicitRunOverride) {
       const explicitRef = explicitModelOverride
         ? explicitProviderOverride
@@ -1069,6 +1117,12 @@ async function agentCommandInternal(
       provider = explicitRef.provider;
       model = explicitRef.model;
     }
+    const providerForAuthProfileValidation = provider;
+    const explicitRunAuthProfileId = resolveExplicitRunAuthProfile({
+      authProfileId: opts.authProfileId,
+      provider: providerForAuthProfileValidation,
+      agentDir,
+    });
     if (sessionEntry) {
       const authProfileId = sessionEntry.authProfileOverride;
       if (authProfileId) {
@@ -1202,6 +1256,7 @@ async function agentCommandInternal(
             skillsSnapshot,
             resolvedVerboseLevel,
             agentDir,
+            explicitAuthProfileId: explicitRunAuthProfileId,
             authProfileProvider: providerForAuthProfileValidation,
             sessionStore,
             storePath,

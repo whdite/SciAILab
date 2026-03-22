@@ -292,6 +292,18 @@ async function main() {
     const messageEdges = new Set(
       messages.messages.map((item) => `${item.from_agent}->${item.to_agent}:${item.message_type}`),
     );
+    const parseDependencies = (artifact) => JSON.parse(artifact.upstream_dependencies || "[]");
+    const parseMetadata = (artifact) => JSON.parse(artifact.metadata_json || "{}");
+    const revisedDraftPresent = artifacts.artifacts
+      .filter((artifact) => artifact.artifact_type === "draft")
+      .some((artifact) => parseDependencies(artifact).some((dependency) => dependency.includes("review_report")));
+    const feedbackDrivenExperimentPresent = artifacts.artifacts
+      .filter((artifact) => artifact.artifact_type === "results_summary")
+      .some((artifact) => parseDependencies(artifact).some((dependency) => dependency.includes("review_report")));
+    const reviewerCycles = artifacts.artifacts
+      .filter((artifact) => artifact.artifact_type === "review_report")
+      .map((artifact) => Number(parseMetadata(artifact).review_cycle || 0))
+      .sort((left, right) => left - right);
 
     assert.deepEqual(taskStatuses, {
       explorer: "done",
@@ -317,6 +329,9 @@ async function main() {
     assert.ok(eventTypes.includes("review_requires_evidence"));
     assert.ok(eventTypes.includes("review_requires_revision"));
     assert.ok(eventTypes.includes("review_approved"));
+    assert.equal(revisedDraftPresent, true);
+    assert.equal(feedbackDrivenExperimentPresent, true);
+    assert.deepEqual(reviewerCycles, [1, 2, 3, 4]);
     assert.deepEqual(
       Object.fromEntries(agentStates.agent_states.map((item) => [item.agent_id, item.state])),
       {

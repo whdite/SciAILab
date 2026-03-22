@@ -6,7 +6,6 @@ import { resolveUserPath } from "../utils.js";
 
 function isSourceCheckoutRoot(packageRoot: string): boolean {
   return (
-    fs.existsSync(path.join(packageRoot, ".git")) &&
     fs.existsSync(path.join(packageRoot, "src")) &&
     fs.existsSync(path.join(packageRoot, "extensions"))
   );

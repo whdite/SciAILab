@@ -10,6 +10,7 @@ export type SubagentRunParams = {
   message: string;
   provider?: string;
   model?: string;
+  authProfile?: string;
   extraSystemPrompt?: string;
   lane?: string;
   deliver?: boolean;

@@ -170,6 +170,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       agentId?: string;
       provider?: string;
       model?: string;
+      authProfile?: string;
       to?: string;
       replyTo?: string;
       sessionId?: string;
@@ -609,6 +610,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         images,
         provider: providerOverride,
         model: modelOverride,
+        authProfileId: request.authProfile?.trim() || undefined,
         to: resolvedTo,
         sessionId: resolvedSessionId,
         sessionKey: resolvedSessionKey,

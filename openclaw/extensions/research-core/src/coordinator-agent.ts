@@ -43,6 +43,7 @@ type ArtifactRecord = {
   version: number;
   state: string;
   path: string;
+  metadata_json?: string;
 };
 
 type PackageRecord = {
@@ -219,6 +220,41 @@ function latestArtifactByType(artifacts: ArtifactRecord[], artifactType: string)
   return artifacts.find((artifact) => artifact.artifact_type === artifactType);
 }
 
+function artifactsByTypeCount(artifacts: ArtifactRecord[], artifactType: string): number {
+  return artifacts.filter((artifact) => artifact.artifact_type === artifactType).length;
+}
+
+function artifactById(artifacts: ArtifactRecord[], artifactId: string | null | undefined): ArtifactRecord | undefined {
+  if (!artifactId) {
+    return undefined;
+  }
+  return artifacts.find((artifact) => artifact.artifact_id === artifactId);
+}
+
+function artifactFromDependency(
+  artifacts: ArtifactRecord[],
+  dependency: string | null | undefined,
+): ArtifactRecord | undefined {
+  if (!dependency || !dependency.includes(":")) {
+    return undefined;
+  }
+  return artifactById(artifacts, dependency);
+}
+
+function artifactMetadata(artifact: ArtifactRecord | undefined): Record<string, unknown> {
+  if (!artifact?.metadata_json) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(artifact.metadata_json);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 function buildArtifactPath(task: ClaimedTask): string {
   const artifactType = ROLE_ARTIFACT_TYPES[task.owner_agent];
   return path.join(task.workspace_path, "artifacts", task.owner_agent, `${artifactType}_${task.task_id}.md`);
@@ -241,6 +277,8 @@ function buildCoordinatorMessage(params: {
   const results = latestArtifactByType(params.artifacts, "results_summary");
   const draft = latestArtifactByType(params.artifacts, "draft");
   const review = latestArtifactByType(params.artifacts, "review_report");
+  const dependencyArtifact = artifactFromDependency(params.artifacts, params.task.dependency);
+  const dependencyMetadata = artifactMetadata(dependencyArtifact);
   const reviewerDecisionHint =
     params.task.owner_agent === "reviewer"
       ? [
@@ -261,12 +299,19 @@ function buildCoordinatorMessage(params: {
     `Task: ${params.task.title}`,
     `Acceptance: ${params.task.acceptance || "(none)"}`,
     `Owner role: ${params.task.owner_agent}`,
+    `Dependency: ${params.task.dependency || "(none)"}`,
     "",
     "Latest artifacts:",
     artifactExcerpt(hypothesis),
     artifactExcerpt(results),
     artifactExcerpt(draft),
     artifactExcerpt(review),
+    dependencyArtifact ? `Dependency artifact: ${artifactExcerpt(dependencyArtifact)}` : "",
+    dependencyArtifact
+      ? `Dependency review context: action=${String(dependencyMetadata.requested_action || "(none)")}, cycle=${String(
+          dependencyMetadata.review_cycle || "(unknown)",
+        )}`
+      : "",
     "",
     inputPackageHint,
     reviewerDecisionHint,
@@ -518,6 +563,36 @@ async function completeTask(
   });
 }
 
+async function recordProviderObservation(
+  paths: ResolvedResearchPaths,
+  params: {
+    role: CoordinatorRole;
+    eventType: "attempt" | "success" | "failure";
+    routeConfig?: RoleRoutingConfig;
+    error?: string;
+    failover?: boolean;
+  },
+): Promise<void> {
+  const payload = {
+    role: params.role,
+    event_type: params.eventType,
+    ...(params.routeConfig?.provider ? { provider: params.routeConfig.provider } : {}),
+    ...(params.routeConfig?.model ? { model: params.routeConfig.model } : {}),
+    ...(params.routeConfig?.auth_profile ? { auth_profile: params.routeConfig.auth_profile } : {}),
+    ...(params.error ? { error: params.error } : {}),
+    ...(params.failover ? { failover: true } : {}),
+  };
+  try {
+    await runResearchRequest(paths, {
+      method: "POST",
+      route: "/v1/control/provider-observability/event",
+      body: payload,
+    });
+  } catch {
+    // Observability must not block coordinator progress.
+  }
+}
+
 async function prepareInputPackage(
   paths: ResolvedResearchPaths,
   task: ClaimedTask,
@@ -531,25 +606,37 @@ async function prepareInputPackage(
   if (!hypothesis || !results) {
     throw new Error(`writer requires hypotheses and results_summary for project ${task.project_id}`);
   }
+  const reviewFeedback = artifactFromDependency(artifacts, task.dependency);
   return await freezePackage(paths, {
     projectId: task.project_id,
     packageType: "writing_input_package",
-    createdFrom: [hypothesis.artifact_id, results.artifact_id],
+    createdFrom: [hypothesis.artifact_id, results.artifact_id, reviewFeedback?.artifact_id].filter(
+      (value): value is string => Boolean(value),
+    ),
   });
 }
 
-function upstreamDependenciesForRole(role: CoordinatorRole, artifacts: ArtifactRecord[]): string[] | undefined {
+function upstreamDependenciesForRole(
+  task: ClaimedTask,
+  artifacts: ArtifactRecord[],
+): string[] | undefined {
+  const role = task.owner_agent;
+  const dependencyArtifact = artifactFromDependency(artifacts, task.dependency);
   if (role === "explorer") {
     return undefined;
   }
   if (role === "experiment") {
     const hypothesis = latestArtifactByType(artifacts, "hypotheses");
-    return hypothesis ? [hypothesis.artifact_id] : undefined;
+    return [hypothesis?.artifact_id, dependencyArtifact?.artifact_id].filter(
+      (value): value is string => Boolean(value),
+    );
   }
   if (role === "writer") {
     const hypothesis = latestArtifactByType(artifacts, "hypotheses");
     const results = latestArtifactByType(artifacts, "results_summary");
-    return [hypothesis?.artifact_id, results?.artifact_id].filter((value): value is string => Boolean(value));
+    return [hypothesis?.artifact_id, results?.artifact_id, dependencyArtifact?.artifact_id].filter(
+      (value): value is string => Boolean(value),
+    );
   }
   const draft = latestArtifactByType(artifacts, "draft");
   return draft ? [draft.artifact_id] : undefined;
@@ -593,6 +680,11 @@ async function runSingleCoordinatorTask(
     state: role === "reviewer" ? "review_pending" : "executing",
     currentTaskId: task.task_id,
   });
+  await recordProviderObservation(paths, {
+    role,
+    eventType: "attempt",
+    routeConfig,
+  });
 
   const sessionKey = `${paths.coordinatorSessionPrefix}:${role}:${task.task_id}`;
   const run = await api.runtime.subagent.run({
@@ -607,6 +699,7 @@ async function runSingleCoordinatorTask(
     deliver: false,
     ...(routeConfig?.provider ? { provider: routeConfig.provider } : {}),
     ...(routeConfig?.model ? { model: routeConfig.model } : {}),
+    ...(routeConfig?.auth_profile ? { authProfile: routeConfig.auth_profile } : {}),
     idempotencyKey: `research-core:${task.task_id}`,
   });
   const wait = await api.runtime.subagent.waitForRun({
@@ -631,12 +724,26 @@ async function runSingleCoordinatorTask(
     artifactType: ROLE_ARTIFACT_TYPES[role],
     artifactPath,
     state: ROLE_ARTIFACT_STATES[role],
-    upstreamDependencies: upstreamDependenciesForRole(role, artifacts),
+    upstreamDependencies: upstreamDependenciesForRole(task, artifacts),
     metadata: {
       task_id: task.task_id,
       session_key: sessionKey,
       summary: result.summary,
       input_package_id: inputPackage?.package_id,
+      ...(task.dependency ? { dependency: task.dependency } : {}),
+      ...(role === "reviewer"
+        ? {
+            review_cycle: artifactsByTypeCount(artifacts, "review_report") + 1,
+            requested_action:
+              result.event_type === "review_requires_ablation"
+                ? "ablation"
+                : result.event_type === "review_requires_evidence"
+                  ? "evidence"
+                  : result.event_type === "review_requires_revision"
+                    ? "revision"
+                    : "approved",
+          }
+        : {}),
     },
   });
 
@@ -669,6 +776,7 @@ async function runSingleCoordinatorTask(
       artifact_id: artifact.artifact_id,
       ...(frozenPackage?.package_id ? { package_id: frozenPackage.package_id } : {}),
       ...(result.message?.to_agent ? { next_agent: result.message.to_agent } : {}),
+      ...(role === "reviewer" ? { review_cycle: artifactsByTypeCount(artifacts, "review_report") + 1 } : {}),
       ...(consumeLimit ? { consume_limit: consumeLimit } : {}),
     },
   });
@@ -676,6 +784,11 @@ async function runSingleCoordinatorTask(
     projectId: task.project_id,
     agentId: role,
     state: "idle",
+  });
+  await recordProviderObservation(paths, {
+    role,
+    eventType: "success",
+    routeConfig,
   });
   if (paths.coordinatorDeleteSession) {
     await api.runtime.subagent.deleteSession({
@@ -696,9 +809,17 @@ async function runSingleCoordinatorTask(
 async function blockTask(
   paths: ResolvedResearchPaths,
   task: ClaimedTask,
+  routeConfig: RoleRoutingConfig | undefined,
   error: unknown,
 ): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
+  await recordProviderObservation(paths, {
+    role: task.owner_agent,
+    eventType: "failure",
+    routeConfig,
+    error: message,
+    failover: /fallback|failover/i.test(message),
+  });
   await completeTask(paths, {
     taskId: task.task_id,
     status: "blocked",
@@ -754,7 +875,7 @@ export async function runResearchCoordinatorPass(
     try {
       runs.push(await runSingleCoordinatorTask(api, paths, task, consumeLimit, params.routeConfig));
     } catch (error) {
-      await blockTask(paths, task, error);
+      await blockTask(paths, task, params.routeConfig, error);
       throw error;
     }
   }

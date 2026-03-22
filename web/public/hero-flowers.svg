@@ -1,0 +1,57 @@
+<svg width="960" height="640" viewBox="0 0 960 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="640" fill="#121212"/>
+  <rect width="960" height="640" fill="url(#bg)"/>
+  <g opacity="0.22" filter="url(#blur)">
+    <circle cx="248" cy="190" r="128" fill="#FFFFFF"/>
+    <circle cx="702" cy="196" r="150" fill="#F4F4F4"/>
+    <circle cx="514" cy="430" r="188" fill="#DADADA"/>
+  </g>
+
+  <g transform="translate(282 330)">
+    <ellipse rx="44" ry="114" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(45)" fill="#F1F1F1"/>
+    <ellipse rx="44" ry="114" transform="rotate(90)" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(135)" fill="#E5E5E5"/>
+    <ellipse rx="34" ry="86" transform="rotate(22.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(67.5)" fill="#D0D0D0"/>
+    <ellipse rx="34" ry="86" transform="rotate(112.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(157.5)" fill="#CECECE"/>
+    <circle r="32" fill="#FFFFFF"/>
+  </g>
+
+  <g transform="translate(666 244) scale(0.82)">
+    <ellipse rx="44" ry="114" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(45)" fill="#F1F1F1"/>
+    <ellipse rx="44" ry="114" transform="rotate(90)" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(135)" fill="#E5E5E5"/>
+    <ellipse rx="34" ry="86" transform="rotate(22.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(67.5)" fill="#D0D0D0"/>
+    <ellipse rx="34" ry="86" transform="rotate(112.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(157.5)" fill="#CECECE"/>
+    <circle r="32" fill="#FFFFFF"/>
+  </g>
+
+  <g transform="translate(586 472) scale(0.68)">
+    <ellipse rx="44" ry="114" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(45)" fill="#F1F1F1"/>
+    <ellipse rx="44" ry="114" transform="rotate(90)" fill="#F6F6F6"/>
+    <ellipse rx="44" ry="114" transform="rotate(135)" fill="#E5E5E5"/>
+    <ellipse rx="34" ry="86" transform="rotate(22.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(67.5)" fill="#D0D0D0"/>
+    <ellipse rx="34" ry="86" transform="rotate(112.5)" fill="#DADADA"/>
+    <ellipse rx="34" ry="86" transform="rotate(157.5)" fill="#CECECE"/>
+    <circle r="32" fill="#FFFFFF"/>
+  </g>
+
+  <defs>
+    <linearGradient id="bg" x1="480" y1="0" x2="480" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D1D1D"/>
+      <stop offset="1" stop-color="#080808"/>
+    </linearGradient>
+    <filter id="blur" x="-8" y="-66" width="966" height="872" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="48" result="effect1_foregroundBlur_1_2"/>
+    </filter>
+  </defs>
+</svg>

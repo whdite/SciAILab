@@ -1,7 +1,13 @@
 # Runtime state
 data/research.db
+data/logs/
+data/runtime/
+data/tmp_attach_auto_verify/
 workspace/projects/
 .repo-backups/
+image.png
+openclaw/.tmp-openclaw-test/
+openclaw/.tmp-openclaw-test2/
 
 # Python
 __pycache__/
@@ -13,6 +19,10 @@ venv/
 
 # Node
 node_modules/
+web/dist/
+web/*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
 openclaw/node_modules/
 openclaw/dist/
 

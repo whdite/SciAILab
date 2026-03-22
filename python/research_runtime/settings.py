@@ -14,6 +14,7 @@ class ResearchRuntimeSettings:
     project_root: Path
     db_path: Path
     workspace_root: Path
+    worktree_root: Path
     host: str
     port: int
     auto_consume_events: bool
@@ -33,6 +34,9 @@ def load_settings() -> ResearchRuntimeSettings:
     workspace_root = Path(
         os.environ.get("SCIAILAB_WORKSPACE_ROOT", root / "workspace" / "projects")
     )
+    worktree_root = Path(
+        os.environ.get("SCIAILAB_WORKTREE_ROOT", root / "workspace" / "worktrees")
+    )
     host = os.environ.get("SCIAILAB_FASTAPI_HOST", "127.0.0.1")
     port = int(os.environ.get("SCIAILAB_FASTAPI_PORT", "8765"))
     auto_consume_events = env_flag("SCIAILAB_AUTO_CONSUME_EVENTS", True)
@@ -41,6 +45,7 @@ def load_settings() -> ResearchRuntimeSettings:
         project_root=root,
         db_path=db_path,
         workspace_root=workspace_root,
+        worktree_root=worktree_root,
         host=host,
         port=port,
         auto_consume_events=auto_consume_events,

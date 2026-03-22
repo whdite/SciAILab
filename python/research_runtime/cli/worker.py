@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from research_runtime.coordinators.runner import run_coordinators
@@ -28,6 +29,7 @@ from research_runtime.storage.db import (
     set_agent_activation,
     set_agent_state,
     transition_artifact_state,
+    update_message_state,
     update_task_status,
     upsert_agent_routing,
 )
@@ -45,6 +47,7 @@ def handle_command(request: dict[str, Any]) -> dict[str, Any]:
     command = request.get("command")
     db_path = str(request.get("db_path") or "")
     workspace_root = str(request.get("workspace_root") or "")
+    worktree_root = str(request.get("worktree_root") or (Path(workspace_root).resolve().parent / "worktrees"))
     payload = request.get("payload") or {}
 
     if not db_path:
@@ -162,8 +165,22 @@ def handle_command(request: dict[str, Any]) -> dict[str, Any]:
             "result": list_messages(
                 db_path,
                 str(payload.get("project_id") or ""),
+                from_agent=str(payload["from_agent"]) if payload.get("from_agent") else None,
                 to_agent=str(payload["to_agent"]) if payload.get("to_agent") else None,
                 status=str(payload["status"]) if payload.get("status") else None,
+                handoff_state=str(payload["handoff_state"]) if payload.get("handoff_state") else None,
+                limit=int(payload["limit"]) if payload.get("limit") is not None else None,
+            ),
+        }
+
+    if command == "update_message_state":
+        return {
+            "status": "ok",
+            "result": update_message_state(
+                db_path,
+                message_id=str(payload.get("message_id") or ""),
+                status=str(payload["status"]) if payload.get("status") else None,
+                handoff_state=str(payload["handoff_state"]) if payload.get("handoff_state") else None,
             ),
         }
 
@@ -255,13 +272,19 @@ def handle_command(request: dict[str, Any]) -> dict[str, Any]:
 
     if command == "update_task_status":
         if not payload.get("event_type"):
+            completion = complete_task_and_emit(
+                db_path,
+                task_id=str(payload.get("task_id") or ""),
+                status=str(payload.get("status") or ""),
+                consume_after_emit=False,
+                consume_limit=int(payload.get("limit") or 20),
+            )
             return {
                 "status": "ok",
-                "result": update_task_status(
-                    db_path,
-                    task_id=str(payload.get("task_id") or ""),
-                    status=str(payload.get("status") or ""),
-                ),
+                "result": {
+                    **completion["task"],
+                    "auto_actions": completion["auto_actions"],
+                },
             }
         return {
             "status": "ok",
@@ -295,6 +318,7 @@ def handle_command(request: dict[str, Any]) -> dict[str, Any]:
             "result": run_coordinators(
                 db_path,
                 workspace_root,
+                worktree_root,
                 project_id=str(payload["project_id"]) if payload.get("project_id") else None,
                 owner_agent=str(payload["owner_agent"]) if payload.get("owner_agent") else None,
                 limit=int(payload.get("limit") or 1),

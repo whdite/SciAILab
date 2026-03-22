@@ -150,12 +150,13 @@ def _create_message(
     content: str,
     artifact_ref: str | None = None,
 ) -> None:
+    now = utc_now()
     conn.execute(
         """
         INSERT INTO messages (
           message_id, project_id, from_agent, to_agent, message_type,
-          priority, artifact_ref, status, content, created_at
-        ) VALUES (?, ?, ?, ?, ?, 'normal', ?, 'pending', ?, ?)
+          priority, artifact_ref, status, handoff_state, content, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'normal', ?, 'pending', 'queued', ?, ?, ?)
         """,
         (
             message_id,
@@ -165,7 +166,8 @@ def _create_message(
             message_type,
             artifact_ref,
             content,
-            utc_now(),
+            now,
+            now,
         ),
     )
 
@@ -247,6 +249,30 @@ def _dependency_for_payload(payload: dict) -> str | None:
     return artifact_ref
 
 
+def _find_existing_open_task(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    owner_agent: str,
+    dependency: str | None,
+) -> dict | None:
+    if not dependency:
+        return None
+    row = conn.execute(
+        """
+        SELECT * FROM tasks
+        WHERE project_id = ?
+          AND owner_agent = ?
+          AND dependency = ?
+          AND status IN ('todo', 'in_progress', 'blocked', 'retry')
+        ORDER BY created_at ASC
+        LIMIT 1
+        """,
+        (project_id, owner_agent, dependency),
+    ).fetchone()
+    return row_to_dict(row)
+
+
 def _consume_downstream_task_rule(
     conn: sqlite3.Connection,
     *,
@@ -255,6 +281,16 @@ def _consume_downstream_task_rule(
     payload: dict,
     rule: DownstreamTaskRule,
 ) -> str:
+    dependency = _dependency_for_payload(payload)
+    existing_task = _find_existing_open_task(
+        conn,
+        project_id=project_id,
+        owner_agent=rule.owner_agent,
+        dependency=dependency,
+    )
+    if existing_task is not None:
+        return f"{rule.action}_reused"
+
     task_id = f"task_{event['event_id']}"
     _create_task(
         conn,
@@ -265,7 +301,7 @@ def _consume_downstream_task_rule(
         owner_agent=rule.owner_agent,
         status="todo",
         acceptance=rule.acceptance,
-        dependency=_dependency_for_payload(payload),
+        dependency=dependency,
     )
     _create_message(
         conn,

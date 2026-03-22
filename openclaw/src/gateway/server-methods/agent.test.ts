@@ -334,6 +334,39 @@ describe("gateway agent handler", () => {
     );
   });
 
+  it("forwards auth profile overrides for admin-scoped callers", async () => {
+    primeMainAgentRun();
+
+    await invokeAgent(
+      {
+        message: "test auth profile override",
+        agentId: "main",
+        sessionKey: "agent:main:main",
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        authProfile: "anthropic:work",
+        idempotencyKey: "test-idem-auth-profile-override",
+      },
+      {
+        reqId: "test-idem-auth-profile-override",
+        client: {
+          connect: {
+            scopes: ["operator.admin"],
+          },
+        } as AgentHandlerArgs["client"],
+      },
+    );
+
+    const lastCall = mocks.agentCommand.mock.calls.at(-1);
+    expect(lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        authProfileId: "anthropic:work",
+      }),
+    );
+  });
+
   it("rejects provider and model overrides for write-scoped callers", async () => {
     primeMainAgentRun();
     mocks.agentCommand.mockClear();

@@ -246,6 +246,41 @@ describe("loadGatewayPlugins", () => {
     });
   });
 
+  test("forwards auth profile overrides when the request scope is authorized", async () => {
+    const serverPlugins = await importServerPluginsModule();
+    const runtime = await createSubagentRuntime(serverPlugins);
+    const gatewayScopeModule = await import("../plugins/runtime/gateway-request-scope.js");
+    const scope = {
+      context: createTestContext("request-scope-forward-auth-profile"),
+      client: {
+        connect: {
+          scopes: ["operator.admin"],
+        },
+      } as GatewayRequestOptions["client"],
+      isWebchatConnect: () => false,
+    } satisfies PluginRuntimeGatewayRequestScope;
+
+    await gatewayScopeModule.withPluginRuntimeGatewayRequestScope(scope, () =>
+      runtime.run({
+        sessionKey: "s-auth-profile",
+        message: "use the auth profile override",
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        authProfile: "anthropic:work",
+        deliver: false,
+      }),
+    );
+
+    expect(getLastDispatchedParams()).toMatchObject({
+      sessionKey: "s-auth-profile",
+      message: "use the auth profile override",
+      provider: "anthropic",
+      model: "claude-haiku-4-5",
+      authProfile: "anthropic:work",
+      deliver: false,
+    });
+  });
+
   test("rejects provider/model overrides for fallback runs without explicit authorization", async () => {
     const serverPlugins = await importServerPluginsModule();
     const runtime = await createSubagentRuntime(serverPlugins);

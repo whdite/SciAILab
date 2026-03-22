@@ -43,6 +43,8 @@ export type AgentCommandOpts = {
   provider?: string;
   /** Per-run model override. */
   model?: string;
+  /** Per-run auth profile override locked to the selected provider. */
+  authProfileId?: string;
   to?: string;
   sessionId?: string;
   sessionKey?: string;

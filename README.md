@@ -2,6 +2,11 @@
 
 SciAILab is a research control-plane project built around a FastAPI runtime, SQLite truth store, and an OpenClaw-hosted `research-core` plugin.
 
+## Documentation
+
+- `docs/README.md`: current document index and recommended reading order
+- `setup.md`: verified local bootstrap and startup flow
+
 ## Repository Layout
 
 - `docs/`: architecture, progress, and rule-matrix documents
@@ -22,3 +27,5 @@ Use verify-only mode if dependencies are already prepared:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\bootstrap_verify_research_core.ps1 -VerifyOnly
 ```
+
+For the current runtime startup sequence, use `setup.md`.
